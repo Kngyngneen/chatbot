@@ -1,0 +1,105 @@
+from pathlib import Path
+import os
+
+# Simulate environment variable loading (normally from .env)
+env_vars = {
+    "REDDIT_CLIENT_ID": "your_client_id",
+    "REDDIT_CLIENT_SECRET": "your_client_secret",
+    "REDDIT_USERNAME": "your_username",
+    "REDDIT_PASSWORD": "your_password",
+    "REDDIT_USER_AGENT": "YouTubeCommentBot by u/your_username"
+}
+
+# Write the final version of the bot as a real deployable script
+final_script = f"""
+import os
+import re
+import time
+import logging
+import praw
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Setup logging
+logging.basicConfig(
+    filename='bot_activity.log',
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
+# Load Reddit API credentials from environment
+reddit = praw.Reddit(
+    client_id=os.getenv("REDDIT_CLIENT_ID"),
+    client_secret=os.getenv("REDDIT_CLIENT_SECRET"),
+    username=os.getenv("REDDIT_USERNAME"),
+    password=os.getenv("REDDIT_PASSWORD"),
+    user_agent=os.getenv("REDDIT_USER_AGENT")
+)
+
+# Set target subreddit
+subreddit = reddit.subreddit("learnprogramming")
+
+# Regex patterns for flexible keyword matching
+keywords = [r"\\bbeginner python\\b", r"\\blearn coding\\b", r"\\bhow to code\\b"]
+compiled_keywords = [re.compile(k, re.IGNORECASE) for k in keywords]
+
+# The comment to post
+comment_text = \"\"\"\
+Hey! 👋 I made a quick YouTube video that explains this really well:
+📹 https://www.youtube.com/watch?v=YOUR_VIDEO_ID
+Hope it helps! Let me know what you think.
+\"\"\"
+
+# File to store commented post IDs
+commented_ids_file = "commented_ids.txt"
+
+# Load previously commented IDs
+if os.path.exists(commented_ids_file):
+    with open(commented_ids_file, "r") as f:
+        commented_ids = set(line.strip() for line in f)
+else:
+    commented_ids = set()
+
+# Main loop
+try:
+    for submission in subreddit.stream.submissions(skip_existing=True):
+        if submission.id in commented_ids:
+            continue
+
+        title = submission.title.lower()
+        if any(pattern.search(title) for pattern in compiled_keywords):
+            submission.comments.replace_more(limit=0)
+            all_comments = submission.comments.list()
+            if any("youtube" in comment.body.lower() for comment in all_comments):
+                logging.info(f"Already replied to: {submission.title}")
+                commented_ids.add(submission.id)
+                continue
+
+            try:
+                submission.reply(comment_text)
+                logging.info(f"✅ Commented on: {submission.title}")
+                commented_ids.add(submission.id)
+                with open(commented_ids_file, "a") as f:
+                    f.write(f"{{submission.id}}\\n")
+                time.sleep(600)  # Wait 10 minutes between comments
+            except Exception as e:
+                logging.warning(f"⚠️ Error replying to {{submission.id}}: {{e}}")
+        else:
+            logging.info(f"No match for: {submission.title}")
+
+except KeyboardInterrupt:
+    logging.info("Bot stopped by user.")
+"""
+
+# Save script to file
+bot_path = Path("/mnt/data/reddit_comment_bot.py")
+bot_path.write_text(final_script)
+
+# Simulate writing a .env template
+env_template = "\n".join(f"{key}={value}" for key, value in env_vars.items())
+env_path = Path("/mnt/data/.env.template")
+env_path.write_text(env_template)
+
+bot_path.name, env_path.name
